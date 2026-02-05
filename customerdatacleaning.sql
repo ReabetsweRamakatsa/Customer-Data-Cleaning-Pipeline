@@ -1,9 +1,10 @@
 USE customer_data;
 SELECT * FROM retailcustomers;
--- THE COMPLETE INTEGRATED CLEANING PIPELINE (FINAL VERSION)
-WITH 
+
+-- DATA CLEANING PIPELINE
 -- STEP 1: INITIAL STANDARDIZATION & OUTLIER DETECTION
-step1_standardize AS (
+WITH 
+standardize_data AS (
     SELECT
         customer_id,
         TRIM(CONCAT(UPPER(LEFT(first_name, 1)), LOWER(SUBSTRING(first_name, 2)))) AS first_name,
@@ -39,15 +40,15 @@ step1_standardize AS (
 ),
 
 -- STEP 2: DEDUPLICATION & EMAIL VALIDATION
-step2_deduplicate AS (
+deduplicate AS (
     SELECT *,
         ROW_NUMBER() OVER (PARTITION BY email ORDER BY cleaned_date_obj DESC) AS row_num
-    FROM step1_standardize
+    FROM standardize_data
     WHERE email LIKE '%@%.%' 
 ),
 
 -- STEP 3: FINAL ENRICHMENT & LABELING
-step3_final_clean AS (
+final_clean AS (
     SELECT
         customer_id,
         CONCAT(first_name, ' ', last_name) AS full_name,
@@ -63,7 +64,7 @@ step3_final_clean AS (
             WHEN cleaned_date_obj IS NULL THEN '-' 
             ELSE CAST(DATEDIFF(CURRENT_DATE, cleaned_date_obj) AS CHAR) 
         END AS days_since_registration,
-        -- Quality Flag (Now includes Outlier detection)
+        -- Quality Flag (Includes Outlier detection)
         CASE
             WHEN phone_number = 'Not Provided' 
                  OR city = 'Unknown' 
@@ -71,9 +72,9 @@ step3_final_clean AS (
                  OR cleaned_date_obj IS NULL THEN 'Incomplete'
             ELSE 'Complete'
         END AS data_quality_flag
-    FROM step2_deduplicate
+    FROM deduplicate
     WHERE row_num = 1
 )
 
 -- FINAL OUTCOME
-SELECT * FROM step3_final_clean;
+SELECT * FROM final_clean;
